@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #fafafa;
+  --bg-elev: #ffffff;
+  --border: #e5e5ea;
+  --text: #111114;
+  --text-muted: #6b7280;
+  --accent: #3b6dff;
+  --accent-soft: #eef4ff;
+
+  /* Motion tokens (designlang-extracted from chatpaper.com) */
+  --ease-in-out-quart: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --duration-xs: 100ms;
+  --duration-sm: 200ms;
+  --duration-md: 300ms;
+}
+
+html, body { background: var(--bg); color: var(--text); }
+body { font-feature-settings: "ss01", "cv11"; }
+
+/* Display headings → Poppins (chatpaper.com signature face) */
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-display, var(--font-sans)), ui-sans-serif, system-ui, sans-serif; }
+
+/* Reading panel for paper bodies / AI summaries */
+.prose-paper p { line-height: 1.7; }
+.prose-paper h2 { font-size: 1.125rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.prose-paper figure { margin: 1rem 0; }
+.prose-paper figcaption { font-size: 0.85rem; color: var(--text-muted); text-align: center; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #d4d4da; border-radius: 3px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* Native date input — match chatpaper.com's flat, light feel */
+input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
+input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 0.85; }
