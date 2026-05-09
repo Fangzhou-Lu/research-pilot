@@ -15,6 +15,7 @@ import { fmtDate } from "../lib/utils";
 import { getViewMode } from "../lib/storage";
 import { authedFetch } from "../lib/user";
 import { PATHS } from "../lib/api";
+import { useBookmarked } from "../lib/use-bookmark";
 import { BookmarkButton } from "./BookmarkButton";
 
 type Lang = "en" | "zh";
@@ -40,6 +41,8 @@ export function PaperCard({
   const [tab, setTab] = useState<CardTab>("abstract");
   const [qa, setQa] = useState<DeepQa | null>(null);
   const [qaBusy, setQaBusy] = useState(false);
+  const [qaNeedsBookmark, setQaNeedsBookmark] = useState(false);
+  const { bookmarked } = useBookmarked(article.id);
 
   useEffect(() => {
     setMode(getViewMode());
@@ -76,6 +79,7 @@ export function PaperCard({
   const ensureQa = async () => {
     if (qa || qaBusy) return;
     setQaBusy(true);
+    setQaNeedsBookmark(false);
     try {
       const r = await authedFetch(PATHS.deepQa, {
         method: "POST",
@@ -84,13 +88,26 @@ export function PaperCard({
           title: article.title,
           abstract: article.abstract,
           language: lang === "zh" ? "zh" : "en",
+          generate: bookmarked,
         }),
       });
-      if (r.ok) setQa((await r.json()) as DeepQa);
+      if (r.status === 204) {
+        setQaNeedsBookmark(true);
+      } else if (r.ok) {
+        setQa((await r.json()) as DeepQa);
+      }
     } finally {
       setQaBusy(false);
     }
   };
+
+  // When the user bookmarks the paper after seeing the placeholder, retry.
+  useEffect(() => {
+    if (bookmarked && qaNeedsBookmark && tab !== "abstract") {
+      void ensureQa();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookmarked]);
 
   const onToggleLang = (next: Lang) => {
     setLang(next);
@@ -257,6 +274,11 @@ export function PaperCard({
                         <div className="flex items-center gap-2 text-ink-400 text-xs">
                           <Loader2 className="h-3 w-3 animate-spin" />
                           Generating Q&amp;A…
+                        </div>
+                      )}
+                      {!qaBusy && !qa && qaNeedsBookmark && (
+                        <div className="text-xs text-ink-500 leading-relaxed">
+                          Bookmark this paper to generate Q&amp;A.
                         </div>
                       )}
                       {tabPayload && (

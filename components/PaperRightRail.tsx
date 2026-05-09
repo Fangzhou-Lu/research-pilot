@@ -19,6 +19,7 @@ import type {
 } from "../lib/types";
 import { authedFetch } from "../lib/user";
 import { PATHS } from "../lib/api";
+import { useBookmarked } from "../lib/use-bookmark";
 
 type CoreTab = "core_points" | "methods" | "experiments";
 
@@ -35,8 +36,10 @@ export function PaperRightRail({ article }: { article: Article }) {
   const [questions, setQuestions] = useState<string[] | null>(null);
   const [tab, setTab] = useState<CoreTab>("core_points");
   const [qa, setQa] = useState<DeepQa | null>(null);
+  const { bookmarked, ready } = useBookmarked(article.id);
 
   useEffect(() => {
+    if (!ready) return; // wait until we know whether to ask the LLM to generate
     let alive = true;
     authedFetch(PATHS.summarize, {
       method: "POST",
@@ -45,11 +48,16 @@ export function PaperRightRail({ article }: { article: Article }) {
         title: article.title,
         abstract: article.abstract,
         authors: article.authors,
+        generate: bookmarked,
       }),
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (r.status === 204) return null; // cache miss + not bookmarked
+        return r.ok ? r.json() : null;
+      })
       .then((j: AISummaryType | null) => {
         if (alive && j) setSummary(j);
+        else if (alive) setSummary(null);
       })
       .catch(() => {});
     authedFetch(PATHS.deepQa, {
@@ -58,11 +66,16 @@ export function PaperRightRail({ article }: { article: Article }) {
         article_id: article.id,
         title: article.title,
         abstract: article.abstract,
+        generate: bookmarked,
       }),
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (r.status === 204) return null;
+        return r.ok ? r.json() : null;
+      })
       .then((j) => {
         if (alive && j && j.core_points) setQa(j as DeepQa);
+        else if (alive) setQa(null);
       })
       .catch(() => {});
     authedFetch("/api/v1/questions", {
@@ -71,17 +84,22 @@ export function PaperRightRail({ article }: { article: Article }) {
         article_id: article.id,
         title: article.title,
         abstract: article.abstract,
+        generate: bookmarked,
       }),
     })
-      .then((r) => (r.ok ? r.json() : { items: null }))
+      .then((r) => {
+        if (r.status === 204) return { items: null };
+        return r.ok ? r.json() : { items: null };
+      })
       .then((j) => {
         if (alive && Array.isArray(j.items)) setQuestions(j.items.slice(0, 5));
+        else if (alive) setQuestions(null);
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [article.id, article.title, article.abstract, article.authors]);
+  }, [article.id, article.title, article.abstract, article.authors, bookmarked, ready]);
 
   const tabPayload = qa?.[tab];
 
@@ -155,7 +173,9 @@ export function PaperRightRail({ article }: { article: Article }) {
             </ul>
           ) : (
             <div className="text-[11px] text-zinc-400 px-2 py-1">
-              Generating summary…
+              {bookmarked
+                ? "Generating summary…"
+                : "Bookmark this paper to generate an AI summary."}
             </div>
           )}
         </div>
@@ -182,7 +202,11 @@ export function PaperRightRail({ article }: { article: Article }) {
           </div>
           <div className="px-4 py-3 max-h-96 overflow-y-auto scrollbar-thin">
             {!tabPayload && (
-              <div className="text-[11px] text-zinc-400">Generating Q&amp;A…</div>
+              <div className="text-[11px] text-zinc-400">
+                {bookmarked
+                  ? "Generating Q&A…"
+                  : "Bookmark this paper to generate Q&A."}
+              </div>
             )}
             {tabPayload && (
               <div>

@@ -2,19 +2,24 @@
 
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Sparkles, AlertCircle } from "lucide-react";
+import { Sparkles, AlertCircle, Bookmark } from "lucide-react";
 import type { AISummary as AISummaryType, Article } from "../lib/types";
 import { authedFetch } from "../lib/user";
 import { PATHS } from "../lib/api";
+import { useBookmarked } from "../lib/use-bookmark";
 
 export function AISummary({ article }: { article: Article }) {
   const [data, setData] = useState<AISummaryType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsBookmark, setNeedsBookmark] = useState(false);
+  const { bookmarked, ready } = useBookmarked(article.id);
 
   useEffect(() => {
+    if (!ready) return;
     setLoading(true);
     setError(null);
+    setNeedsBookmark(false);
     authedFetch(PATHS.summarize, {
       method: "POST",
       body: JSON.stringify({
@@ -22,22 +27,47 @@ export function AISummary({ article }: { article: Article }) {
         title: article.title,
         abstract: article.abstract,
         authors: article.authors,
+        generate: bookmarked,
       }),
     })
       .then(async (r) => {
+        if (r.status === 204) {
+          setNeedsBookmark(true);
+          return null;
+        }
         if (!r.ok) throw new Error(await r.text());
         return r.json();
       })
-      .then((j: AISummaryType) => setData(j))
+      .then((j: AISummaryType | null) => {
+        if (j) setData(j);
+        else setData(null);
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [article.id, article.title, article.abstract, article.authors]);
+  }, [article.id, article.title, article.abstract, article.authors, bookmarked, ready]);
 
   if (loading) {
     return (
       <div className="rounded-md border border-zinc-200 bg-white p-6 text-sm text-zinc-500">
         <Sparkles className="h-4 w-4 inline-block mr-2 text-accent-500 animate-pulse" />
-        Generating an AI summary…
+        {bookmarked ? "Generating an AI summary…" : "Checking cache…"}
+      </div>
+    );
+  }
+  if (needsBookmark) {
+    return (
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-6 text-sm text-zinc-700 flex gap-3">
+        <Bookmark className="h-4 w-4 shrink-0 mt-0.5 text-accent-600" />
+        <div>
+          <div className="font-medium text-zinc-900">
+            Bookmark to generate an AI summary
+          </div>
+          <div className="mt-1 text-xs text-zinc-500">
+            We only run the LLM for papers you collect. Click the bookmark icon
+            on this paper to generate Core Points, Methods, Experiments, and
+            the structured summary.
+          </div>
+        </div>
       </div>
     );
   }

@@ -1,11 +1,13 @@
 use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::Utc;
 use mongodb::bson::doc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::llm::{self, ChatMsg};
 use crate::models::{AISummary, SummarySection};
 use crate::repo;
@@ -21,12 +23,18 @@ pub struct Body {
     pub authors: Vec<String>,
     #[serde(default)]
     pub language: Option<String>,
+    /// Whether the caller is willing to pay for fresh LLM generation on a
+    /// cache miss. The frontend sends `true` only when the paper is in the
+    /// user's bookmarks; anonymous browsing always sends `false` so cold
+    /// papers do not silently bill the LLM provider.
+    #[serde(default)]
+    pub generate: bool,
 }
 
 pub async fn summarize(
     State(st): State<AppState>,
     Json(body): Json<Body>,
-) -> AppResult<Json<AISummary>> {
+) -> Result<Response, AppError> {
     if body.article_id.is_empty() || body.title.is_empty() || body.abs.is_empty() {
         return Err(AppError::Bad("missing fields".into()));
     }
@@ -38,7 +46,13 @@ pub async fn summarize(
             language,
             sections,
             generated_at: Utc::now().timestamp_millis(),
-        }));
+        })
+        .into_response());
+    }
+
+    // Cache miss: only generate when the caller opts in (bookmarked papers).
+    if !body.generate {
+        return Ok(StatusCode::NO_CONTENT.into_response());
     }
 
     if st.cfg.providers.is_empty() {
@@ -90,7 +104,8 @@ pub async fn summarize(
         language,
         sections,
         generated_at: Utc::now().timestamp_millis(),
-    }))
+    })
+    .into_response())
 }
 
 // ─── deep Q&A (Core Points / Methods / Experiments) ─────────────────────────
@@ -103,12 +118,15 @@ pub struct DeepQaBody {
     pub abs: String,
     #[serde(default)]
     pub language: Option<String>,
+    /// See `Body::generate`.
+    #[serde(default)]
+    pub generate: bool,
 }
 
 pub async fn deep_qa(
     State(st): State<AppState>,
     Json(body): Json<DeepQaBody>,
-) -> AppResult<Json<Value>> {
+) -> Result<Response, AppError> {
     if body.article_id.is_empty() || body.title.is_empty() || body.abs.is_empty() {
         return Err(AppError::Bad("missing fields".into()));
     }
@@ -120,8 +138,14 @@ pub async fn deep_qa(
         .await
     {
         if let Ok(payload) = d.get_document("payload") {
-            return Ok(Json(serde_json::to_value(payload).unwrap_or(json!({}))));
+            return Ok(
+                Json(serde_json::to_value(payload).unwrap_or(json!({}))).into_response(),
+            );
         }
+    }
+
+    if !body.generate {
+        return Ok(StatusCode::NO_CONTENT.into_response());
     }
 
     if st.cfg.providers.is_empty() {
@@ -175,7 +199,7 @@ pub async fn deep_qa(
         .upsert(true)
         .await;
 
-    Ok(Json(parsed))
+    Ok(Json(parsed).into_response())
 }
 
 fn parse_deep_qa(text: &str) -> Option<Value> {
@@ -214,6 +238,9 @@ pub struct QuestionsBody {
     pub abs: String,
     #[serde(default)]
     pub language: Option<String>,
+    /// See `Body::generate`.
+    #[serde(default)]
+    pub generate: bool,
 }
 
 const QUESTIONS_SYSTEM: &str =
@@ -228,7 +255,7 @@ Output STRICT JSON only:\n\
 pub async fn questions(
     State(st): State<AppState>,
     Json(body): Json<QuestionsBody>,
-) -> AppResult<Json<Value>> {
+) -> Result<Response, AppError> {
     if body.article_id.is_empty() || body.title.is_empty() || body.abs.is_empty() {
         return Err(AppError::Bad("missing fields".into()));
     }
@@ -246,9 +273,13 @@ pub async fn questions(
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect();
             if qs.len() >= 3 {
-                return Ok(Json(json!({"items": qs})));
+                return Ok(Json(json!({"items": qs})).into_response());
             }
         }
+    }
+
+    if !body.generate {
+        return Ok(StatusCode::NO_CONTENT.into_response());
     }
 
     if st.cfg.providers.is_empty() {
@@ -300,7 +331,7 @@ pub async fn questions(
         .upsert(true)
         .await;
 
-    Ok(Json(json!({"items": qs})))
+    Ok(Json(json!({"items": qs})).into_response())
 }
 
 fn parse_questions(text: &str) -> Option<Vec<String>> {

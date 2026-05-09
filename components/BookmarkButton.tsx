@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { Article } from "../lib/types";
 import { authedFetch } from "../lib/user";
 import { PATHS } from "../lib/api";
+import { emitBookmarkChange } from "../lib/use-bookmark";
 
 export function BookmarkButton({
   articleId,
@@ -37,6 +38,7 @@ export function BookmarkButton({
     setBusy(true);
     const next = !marked;
     setMarked(next);
+    emitBookmarkChange({ articleId, marked: next });
     try {
       if (next) {
         let payload = article ?? null;
@@ -57,6 +59,7 @@ export function BookmarkButton({
       }
     } catch {
       setMarked(!next);
+      emitBookmarkChange({ articleId, marked: !next });
     } finally {
       setBusy(false);
     }
