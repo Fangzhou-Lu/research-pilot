@@ -157,8 +157,12 @@ export function PaperCard({
           )}
 
           <div className="mt-1 text-xs text-ink-500 flex flex-wrap gap-x-3 gap-y-1">
-            <span className="font-mono">{article.primary_category}</span>
-            <span>{fmtDate(article.published)}</span>
+            {article.primary_category && (
+              <span className="font-mono">{article.primary_category}</span>
+            )}
+            {fmtDate(article.published) && (
+              <span>{fmtDate(article.published)}</span>
+            )}
             {!isSimple && article.authors.length > 0 && (
               <span className="truncate max-w-md">
                 {article.authors.slice(0, 4).join(", ")}
