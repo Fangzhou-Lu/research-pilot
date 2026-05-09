@@ -1,0 +1,33 @@
+node_modules
+.next
+out
+build
+.DS_Store
+.env
+.env.local
+.env.*.local
+*.log
+.vercel
+.playwright-mcp/
+mongo-data/
+logs/
+qa-*.png
+.design-extract-output/
+
+# OMC / Claude Code state
+.omc/
+
+# Rust build artifacts
+server-rs/target/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Playwright outputs
+test-results/
+playwright-report/
+
+# Local Playwright accessibility snapshots (working artifacts)
+chatdoc-*.yml
+chatpaper-*.yml
+local-*.yml
